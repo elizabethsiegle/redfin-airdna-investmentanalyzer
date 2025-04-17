@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Investment Analyzer | Redfin & AirDNA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #3f37c9;
+            --accent: #7209b7;
+            --success: #4cc9f0;
+            --danger: #f72585;
+            --warning: #f8961e;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+            --border-radius: 12px;
+            --box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f7ff;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: var(--box-shadow);
+            text-align: center; /* Center header content */
+        }
+
+        .header-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            font-weight: 400;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Enhanced Listing Card Styles */
+        .listing-card {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            transition: var(--transition);
+            margin-bottom: 2rem;
+        }
+
+        .listing-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+        }
+
+        .listing-image {
+            height: 220px;
+            background-color: var(--light-gray);
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            background-repeat: no-repeat; /* Added to prevent tiling */
+        }
+
+        .listing-badge {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            z-index: 1;
+        }
+
+        .listing-content {
+            padding: 1.5rem;
+        }
+
+        .listing-header {
+            margin-bottom: 1rem;
+        }
+
+        .listing-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .listing-price {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .listing-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .detail-icon {
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+
+        .detail-label {
+            font-weight: 500;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--dark);
+            font-size: 1rem;
+        }
+
+        /* Special styling for different details */
+        .beds { color: #3a86ff; }
+        .baths { color: #8338ec; }
+        .sqft { color: #ff006e; }
+        .acres { color: #fb5607; }
+        .hoa { color: #ffbe0b; }
+
+        .listing-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-tag {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .financial-details {
+            background-color: var(--light);
+            border-radius: var(--border-radius);
+            padding: 1.2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .financial-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .financial-label {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .financial-value {
+            font-weight: 500;
+        }
+
+        .positive {
+            color: var(--success);
+        }
+
+        .negative {
+            color: var(--danger);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        footer {
+            background-color: var(--dark);
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+            margin-top: auto;
+            font-size: 0.9rem;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .heart {
+            color: var(--danger);
+        }
+
+        /* Spinner Styles */
+    #spinner {
+        display: none;
+        width: 50px;
+        height: 50px;
+        border: 5px solid var(--light-gray);
+        border-top: 5px solid var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 30px auto;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .listing-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <div>
+                <h1>Property Investment Analyzer</h1>
+                <p class="subtitle">Find profitable rental properties using Redfin & AirDNA data</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="search-container">
+            <h2><i class="fas fa-filter"></i> Filter Properties</h2>
+            <form id="filterForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="minPrice">Minimum Price</label>
+                        <div class="input-group">
+                            <input type="number" id="minPrice" name="minPrice" step="1000" placeholder="$200,000">
+                            <span class="input-icon">$</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="maxPrice">Maximum Price</label>
+                        <div class="input-group">
+                            <input type="number" id="maxPrice" name="maxPrice" step="1000" placeholder="$800,000">
+                            <span class="input-icon">$</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="minBeds">Minimum Bedrooms</label>
+                        <div class="input-group">
+                            <input type="number" id="minBeds" name="minBeds" min="0" placeholder="2">
+                            <i class="fas fa-bed input-icon"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="maxHOA">Maximum HOA</label>
+                        <div class="input-group">
+                            <input type="number" id="maxHOA" name="maxHOA" step="100" placeholder="$500">
+                            <span class="input-icon">$</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="features">Required Features</label>
+                    <input type="text" id="features" name="features" placeholder="pool, parking, ocean view">
+                </div>
+                <button type="submit">
+                    <i class="fas fa-search btn-icon"></i> Find Properties
+                </button>
+                <div id="spinner"></div>
+            </form>
+        </section>
+
+        <section id="results">
+            <!-- Results will be injected here by JavaScript -->
+            <div class="empty-state" id="emptyState">
+                <i class="fas fa-home empty-icon"></i>
+                <h3>No properties found</h3>
+                <p>Use the filters above to find investment properties</p>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <div class="footer-content">
+            Made with <span class="heart"><i class="fas fa-heart"></i></span> in SF with Cloudflare
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('filterForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const spinner = document.getElementById('spinner');
+            const resultsDiv = document.getElementById('results');
+            
+            spinner.style.display = 'block';
+            resultsDiv.innerHTML = '';
+
+            const formData = new FormData(e.target);
+            const params = new URLSearchParams();
+            
+            for (const [key, value] of formData.entries()) {
+                if (value) params.append(key, value);
+            }
+
+            try {
+                const response = await fetch(`/api/listings?${params.toString()}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="error">${data.message}</div>`;
+                    return;
+                }
+
+                if (data.listings.length === 0) {
+                    resultsDiv.innerHTML = '<div class="no-results">No listings found matching your criteria.</div>';
+                    return;
+                }
+
+                // Display listings with enhanced formatting
+                resultsDiv.innerHTML = `
+                    <div class="results-header">
+                        <h2><i class="fas fa-home"></i> ${data.listings.length} Properties Found</h2>
+                    </div>
+                    <div class="listing-grid">
+                        ${data.listings.map(listing => {
+                            // Use listing.image if available, otherwise use a themed placeholder
+                            const imageUrl = listing.imageUrl 
+                                ? listing.imageUrl 
+                                : `https://source.unsplash.com/random/600x400/?house,${Math.floor(Math.random() * 1000)}`;
+                            
+                            return `
+                            <div class="listing-card">
+                                <span class="listing-badge">For Sale</span>
+                                <div style="font-size:10px;word-break:break-all;background:#fff8;">${imageUrl}</div>
+                                <div class="listing-content">
+                                    <div class="listing-header">
+                                        <h3 class="listing-title">${listing.address.split(',')[0]}</h3>
+                                        <div class="listing-price">$${listing.price.toLocaleString()}</div>
+                                    </div>
+                                    
+                                    <div class="listing-details">
+                                        <div class="detail-item">
+                                            <i class="fas fa-bed detail-icon beds"></i>
+                                            <div>
+                                                <div class="detail-label">Beds</div>
+                                                <div class="detail-value beds">${listing.beds}</div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-item">
+                                            <i class="fas fa-bath detail-icon baths"></i>
+                                            <div>
+                                                <div class="detail-label">Baths</div>
+                                                <div class="detail-value baths">${listing.baths}</div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-item">
+                                            <i class="fas fa-ruler-combined detail-icon sqft"></i>
+                                            <div>
+                                                <div class="detail-label">Sq Ft</div>
+                                                <div class="detail-value sqft">${listing.sqft.toLocaleString()}</div>
+                                            </div>
+                                        </div>
+                                        ${listing.acres ? `
+                                        <div class="detail-item">
+                                            <i class="fas fa-mountain detail-icon acres"></i>
+                                            <div>
+                                                <div class="detail-label">Acres</div>
+                                                <div class="detail-value acres">${listing.acres}</div>
+                                            </div>
+                                        </div>` : ''}
+                                        ${listing.hoa ? `
+                                        <div class="detail-item">
+                                            <i class="fas fa-home detail-icon hoa"></i>
+                                            <div>
+                                                <div class="detail-label">HOA</div>
+                                                <div class="detail-value hoa">$${listing.hoa}/mo</div>
+                                            </div>
+                                        </div>` : ''}
+                                    </div>
+                                    
+                                    ${listing.features.length > 0 ? `
+                                    <div class="listing-features">
+                                        ${listing.features.map(feature => `
+                                            <span class="feature-tag">${feature}</span>
+                                        `).join('')}
+                                    </div>` : ''}
+                                    
+                                    <div class="financial-details">
+                                        ${listing.monthlyCost ? `
+                                        <div class="financial-row">
+                                            <span class="financial-label">Monthly Cost</span>
+                                            <span class="financial-value">$${listing.monthlyCost.toLocaleString()}</span>
+                                        </div>` : ''}
+                                        ${listing.monthlyRent ? `
+                                        <div class="financial-row">
+                                            <span class="financial-label">Est. Monthly Rent</span>
+                                            <span class="financial-value">$${listing.monthlyRent.toLocaleString()}</span>
+                                        </div>` : ''}
+                                        ${listing.cashFlow !== undefined ? `
+                                        <div class="financial-row">
+                                            <span class="financial-label">Monthly Cash Flow</span>
+                                            <span class="financial-value ${listing.cashFlow >= 0 ? 'positive' : 'negative'}">
+                                                $${Math.abs(listing.cashFlow).toLocaleString()}
+                                            </span>
+                                        </div>` : ''}
+                                        ${listing.roi ? `
+                                        <div class="financial-row">
+                                            <span class="financial-label">ROI</span>
+                                            <span class="financial-value">${listing.roi.toFixed(1)}%</span>
+                                        </div>` : ''}
+                                    </div>
+                                    
+                                    <div class="action-buttons">
+                                        <a href="${listing.url}" target="_blank" class="btn btn-primary">
+                                            <i class="fas fa-external-link-alt"></i> View on Redfin
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>`;
+            } catch (error) {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = `
+                    <div class="error-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Properties</h3>
+                        <p>${error.message || 'Please try again later'}</p>
+                    </div>`;
+            } finally {
+                spinner.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
