@@ -34,191 +34,175 @@ interface SearchParams {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// API routes middleware
+app.use('/api/*', async (c, next) => {
+    c.header('Content-Type', 'application/json');
+    await next();
+});
+
 // Serve static files from the assets directory
-app.post('/', serveStatic({ root: './assets' }));
+app.use('/*', serveStatic({ root: './assets' }));
 
 // Serve index.html for the root path
 app.get('/', async (c) => {
-  const html = await c.env.BROWSER_KV_LV_HX.get('index.html');
-  if (!html) {
-    return c.text('index.html not found', 404);
-  }
-  return c.html(html);
+    const html = await c.env.BROWSER_KV_LV_HX.get('index.html');
+    if (!html) {
+        return c.text('index.html not found', 404);
+    }
+    return c.html(html);
 });
 
-/**
- * Escapes a string to be safe for HTML content
- * @param str The string to escape
- * @returns The escaped string
- */
-function escapeHtml(str: string): string {
-  const htmlEscapes: { [key: string]: string } = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-    '/': '&#x2F;'
-  };
-  
-  return str.replace(/[&<>"'/]/g, (match) => htmlEscapes[match]);
-}
 
 async function extractListings(page: Page): Promise<Listing[]> {
   const listings: Listing[] = [];
   
-  // Wait for listings to load
-  await page.waitForSelector('.HomeCardContainer', { timeout: 10000 });
-  
-  // Get all home card containers that are not ads
-  const cards = await page.$$('.HomeCardContainer:not(.InlineResultStaticPlacement)');
-  
-  // Process listings
-  for (const card of cards) {
-    try {
-      const address = await card.$eval('.bp-Homecard__Content .bp-Homecard__Address', 
-        el => el.textContent?.trim() || '');
-        
-      const priceText = await card.$eval('.bp-Homecard__Content .bp-Homecard__Price--value', 
-        el => el.textContent?.trim().replace('$','').replace(/,/g,'') || '0');
-      const price = parseInt(priceText);
+  try {
+    // Wait for either the listings container or a "no results" message
+    await Promise.race([
+      page.waitForSelector('.HomeCardContainer', { timeout: 15000 }),
+      page.waitForSelector('.no-results-message', { timeout: 15000 })
+    ]);
 
-      const bedsText = await card.$eval('.bp-Homecard__Stats--beds', el => 
-        el.textContent?.trim() || '0');
-      const bathsText = await card.$eval('.bp-Homecard__Stats--baths', el => 
-        el.textContent?.trim() || '0');
-      const sqftText = await card.$eval('.bp-Homecard__Stats--sqft', el => 
-        el.textContent?.trim() || '0');
-
-      const beds = parseFloat(bedsText.replace(/[^0-9.]/g, '') || '0');
-      const baths = parseFloat(bathsText.replace(/[^0-9.]/g, '') || '0');
-      const sqft = parseInt(sqftText.replace(/[^0-9]/g, '') || '0');
-
-      const hoaText = await card.$eval('.KeyFactsExtension .KeyFacts-item', el => 
-        el.textContent?.includes('HOA') ? el.textContent.replace(/[^0-9]/g, '') : null
-      ).catch(() => null);
-      const hoa = hoaText ? parseInt(hoaText) : undefined;
-
-      const features = await card.$$eval('.KeyFactsExtension .KeyFacts-item', items =>
-        items.map(item => item.textContent?.trim() || '')
-      );
-
-      const url = await card.$eval('.bp-Homecard__Photo', el => el.getAttribute('href') || '');
-      const fullUrl = `https://www.redfin.com${url}`;
-
-      // Get the image URL
-      const imageUrl = await card.$eval('.bp-Homecard__Photo--image', el => el.getAttribute('src') || '');
-
-      const listing: Listing = {
-        address,
-        price,
-        beds,
-        baths, 
-        sqft,
-        hoa,
-        features,
-        url: fullUrl,
-        imageUrl
-      };
-      
-      listings.push(listing);
-    } catch (err) {
-      console.error(`Error extracting listing data: ${err}`);
-      continue;
+    // Check if we have a "no results" message
+    const noResults = await page.$('.no-results-message');
+    if (noResults) {
+      console.log('No listings found for this search');
+      return listings;
     }
+
+    // Get all home card containers that are not ads
+    const cards = await page.$$('.HomeCardContainer:not(.InlineResultStaticPlacement)');
+    
+    if (cards.length === 0) {
+      console.log('No listings found for this search');
+      return listings;
+    }
+
+    // Process listings
+    for (const card of cards) {
+      try {
+        const address = await card.$eval('.bp-Homecard__Content .bp-Homecard__Address', 
+          el => el.textContent?.trim() || '');
+          
+        const priceText = await card.$eval('.bp-Homecard__Content .bp-Homecard__Price--value', 
+          el => el.textContent?.trim().replace('$','').replace(/,/g,'') || '0');
+        const price = parseInt(priceText);
+
+        const bedsText = await card.$eval('.bp-Homecard__Stats--beds', el => 
+          el.textContent?.trim() || '0');
+        const bathsText = await card.$eval('.bp-Homecard__Stats--baths', el => 
+          el.textContent?.trim() || '0');
+        const sqftText = await card.$eval('.bp-Homecard__Stats--sqft', el => 
+          el.textContent?.trim() || '0');
+
+        const beds = parseFloat(bedsText.replace(/[^0-9.]/g, '') || '0');
+        const baths = parseFloat(bathsText.replace(/[^0-9.]/g, '') || '0');
+        const sqft = parseInt(sqftText.replace(/[^0-9]/g, '') || '0');
+
+        const hoaText = await card.$eval('.KeyFactsExtension .KeyFacts-item', el => 
+          el.textContent?.includes('HOA') ? el.textContent.replace(/[^0-9]/g, '') : null
+        ).catch(() => null);
+        const hoa = hoaText ? parseInt(hoaText) : undefined;
+
+        const features = await card.$$eval('.KeyFactsExtension .KeyFacts-item', items =>
+          items.map(item => item.textContent?.trim() || '')
+        );
+
+        const url = await card.$eval('.bp-Homecard__Photo', el => el.getAttribute('href') || '');
+        const fullUrl = `https://www.redfin.com${url}`;
+
+        // Get the image URL
+        const imageUrl = await card.$eval('.bp-Homecard__Photo--image', el => el.getAttribute('src') || '');
+
+        const listing: Listing = {
+          address,
+          price,
+          beds,
+          baths, 
+          sqft,
+          hoa,
+          features,
+          url: fullUrl,
+          imageUrl
+        };
+        
+        listings.push(listing);
+      } catch (err) {
+        console.error(`Error extracting listing data: ${err}`);
+        continue;
+      }
+    }
+  } catch (error) {
+    console.error('Error in extractListings:', error);
+    // Return empty array instead of throwing to allow the request to complete
+    return listings;
   }
 
   return listings;
 }
 
-async function getCityId(city: string, state: string, c:any): Promise<string> {
-    let browser;
-    try {
-        browser = await puppeteer.launch(c.env.MYBROWSER);
-        const page = await browser.newPage();
-        
-        // First, search for the city
-        const searchUrl = `https://www.redfin.com/city/${encodeURIComponent(city)}-${encodeURIComponent(state)}`;
-        console.log('Searching for city ID with URL:', searchUrl);
-        await page.goto(searchUrl, { waitUntil: 'networkidle0' });
-        
-        // Extract the city ID from the URL
-        const currentUrl = page.url();
-        const match = currentUrl.match(/\/city\/(\d+)\//);
-        
-        if (!match) {
-            throw new Error('Could not find city ID');
-        }
-        
-        return match[1];
-    } finally {
-        if (browser) {
-            await browser.close();
-        }
-    }
-}
 
 // API endpoints
 app.get('/api/listings', async (c) => {
-    const params: SearchParams = {
-        city: c.req.query('city') || '',
-        state: c.req.query('state') || '',
-        zip: c.req.query('zip') || '',
-        minPrice: c.req.query('minPrice') ? Number(c.req.query('minPrice')) : 0,
-        maxPrice: c.req.query('maxPrice') ? Number(c.req.query('maxPrice')) : 10000000,
-        minBeds: c.req.query('minBeds') ? Number(c.req.query('minBeds')) : 0,
-        maxHOA: c.req.query('maxHOA') ? Number(c.req.query('maxHOA')) : 10000,
-        features: c.req.query('features')?.split(',') || []
-    };
-
-    if (!params.city || !params.state) {
-        return c.json({ error: 'City and state are required' }, 400);
-    }
-
     let browser;
-    let searchUrl = '';
     try {
-        // Get the city ID
-        const cityId = await getCityId(params.city, params.state, c);
-        
-        // Construct the base URL
-        let baseUrl = `https://www.redfin.com/city/${cityId}/${params.state}/${params.city}/filter`;
-        if (params.zip) {
-            baseUrl = `https://www.redfin.com/zipcode/${params.zip}/filter`;
+        // Get query parameters
+        const zip = c.req.query('zip');
+        const city = c.req.query('city');
+        const state = c.req.query('state');
+        const minPrice = parseInt(c.req.query('minPrice') || '0');
+        const maxPrice = parseInt(c.req.query('maxPrice') || '10000000');
+        const minBeds = parseInt(c.req.query('minBeds') || '0');
+        const maxHOA = parseInt(c.req.query('maxHOA') || '10000');
+        const features = c.req.query('features')?.split(',') || [];
+
+        let searchZipcode: string;
+
+        // If zipcode is provided, use it directly
+        if (zip) {
+            searchZipcode = zip;
+        } 
+        // If city and state are provided, get the zipcode from LLM
+        else if (city && state) {
+            const messages = [
+                { role: "system", content: "You are a helpful assistant that provides zipcodes for US cities. Only respond with the zipcode number, nothing else." },
+                {
+                    role: "user",
+                    content: `What is the main zipcode for ${city}, ${state}? Only respond with the zipcode number.`,
+                },
+            ];
+
+            const response = await c.env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", { messages });
+            searchZipcode = (response as any).response?.trim() || '';
+            
+            // Validate the zipcode format
+            if (!/^\d{5}$/.test(searchZipcode)) {
+                return c.json({ 
+                    error: 'Could not determine a valid zipcode for the specified city and state. Please try a different city or enter a zipcode directly.' 
+                }, 400);
+            }
+        } else {
+            return c.json({ error: 'Either zipcode or city and state are required' }, 400);
         }
 
-        // Construct the search URL with all parameters
-        const urlParams: string[] = [];
-        
-        // Add price range
-        if (params.minPrice > 0) {
-            const minPriceK = Math.floor(params.minPrice / 1000);
-            urlParams.push(`min-price=${minPriceK}k`);
-        }
-        if (params.maxPrice < 10000000) {
-            const maxPriceK = Math.floor(params.maxPrice / 1000);
-            urlParams.push(`max-price=${maxPriceK}k`);
-        }
-        
-        // Add beds
-        if (params.minBeds > 0) {
-            urlParams.push(`min-beds=${params.minBeds}`);
-        }
-        
-        // Add HOA
-        if (params.maxHOA < 10000) {
-            urlParams.push(`hoa=${params.maxHOA}`);
+        // Construct the search URL with the zipcode
+        let searchUrl = `https://www.redfin.com/zipcode/${searchZipcode}/filter`;
+
+        // Add filters to the URL
+        const filters = [];
+        if (minPrice > 0) filters.push(`min-price=${Math.floor(minPrice/1000)}k`);
+        if (maxPrice > 0) filters.push(`max-price=${Math.floor(maxPrice/1000)}k`);
+        if (minBeds > 0) filters.push(`min-beds=${minBeds}`);
+        if (maxHOA < 10000) filters.push(`hoa=${maxHOA}`);
+        if (features.length > 0) filters.push(`remarks=${features.join(',')}`);
+
+        if (filters.length > 0) {
+            searchUrl += `/${filters.join(',')}`;
         }
 
-        // Add features as remarks
-        if (params.features.length > 0) {
-            urlParams.push(`remarks=${params.features.join(',')}`);
-        }
-
-        searchUrl = `${baseUrl}/${urlParams.join(',')}`;
         console.log('Searching with URL:', searchUrl);
 
-        // Initialize browser with specific options
+        // Initialize browser
         browser = await puppeteer.launch(c.env.MYBROWSER);
         const page = await browser.newPage();
         
@@ -227,84 +211,135 @@ app.get('/api/listings', async (c) => {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
         );
 
-        // Set viewport
-        await page.setViewport({ width: 1920, height: 1080 });
-
-        // Navigate directly to the URL
+        // Navigate to the search URL
         await page.goto(searchUrl, {
             waitUntil: 'networkidle0',
             timeout: 30000
         });
 
-        // Wait for listings to appear
-        await page.waitForSelector('.HomeCardContainer', { timeout: 10000 });
+        // Wait for either listings or no results message with increased timeout
+        try {
+            await Promise.race([
+                page.waitForSelector('.HomeCardContainer', { timeout: 20000 }),
+                page.waitForSelector('.no-results-message', { timeout: 20000 }),
+                page.waitForSelector('.bp-Homecard', { timeout: 20000 }) // Alternative selector
+            ]);
 
-        // Extract listings
-        const listings = await page.evaluate(() => {
-            const cards = document.querySelectorAll('.HomeCardContainer:not(.InlineResultStaticPlacement)');
-            return Array.from(cards).map(card => {
+            // Check if we have a "no results" message
+            const noResults = await page.$('.no-results-message');
+            if (noResults) {
+                return c.json({
+                    source: searchUrl,
+                    timestamp: new Date().toISOString(),
+                    totalListings: 0,
+                    listings: [],
+                    message: 'No listings found matching your criteria'
+                }, 200, {
+                    'Content-Type': 'application/json'
+                });
+            }
+
+            // Try to find listings using multiple possible selectors
+            const listings = await page.$$('.HomeCardContainer');
+            
+            if (listings.length === 0) {
+                return c.json({
+                    source: searchUrl,
+                    timestamp: new Date().toISOString(),
+                    totalListings: 0,
+                    listings: [],
+                    message: 'No listings found matching your criteria'
+                }, 200, {
+                    'Content-Type': 'application/json'
+                });
+            }
+
+            // Extract listings data
+            const extractedListings = await Promise.all(listings.map(async (listing) => {
                 try {
-                    const address = card.querySelector('.bp-Homecard__Content .bp-Homecard__Address')?.textContent?.trim() || '';
-                    const priceText = card.querySelector('.bp-Homecard__Content .bp-Homecard__Price--value')?.textContent?.trim().replace('$','').replace(/,/g,'') || '0';
+                    const address = await listing.$eval('.bp-Homecard__Content .bp-Homecard__Address', 
+                        el => el.textContent?.trim() || '').catch(() => '');
+                    
+                    const priceText = await listing.$eval('.bp-Homecard__Content .bp-Homecard__Price--value', 
+                        el => el.textContent?.trim().replace('$','').replace(/,/g,'') || '0').catch(() => '0');
                     const price = parseInt(priceText);
-                    
-                    const bedsText = card.querySelector('.bp-Homecard__Stats--beds')?.textContent?.trim() || '0';
-                    const bathsText = card.querySelector('.bp-Homecard__Stats--baths')?.textContent?.trim() || '0';
-                    const sqftText = card.querySelector('.bp-Homecard__Stats--sqft')?.textContent?.trim() || '0';
-                    
+
+                    const bedsText = await listing.$eval('.bp-Homecard__Stats--beds', el => 
+                        el.textContent?.trim() || '0').catch(() => '0');
+                    const bathsText = await listing.$eval('.bp-Homecard__Stats--baths', el => 
+                        el.textContent?.trim() || '0').catch(() => '0');
+                    const sqftText = await listing.$eval('.bp-Homecard__Stats--sqft', el => 
+                        el.textContent?.trim() || '0').catch(() => '0');
+
                     const beds = parseFloat(bedsText.replace(/[^0-9.]/g, '') || '0');
                     const baths = parseFloat(bathsText.replace(/[^0-9.]/g, '') || '0');
                     const sqft = parseInt(sqftText.replace(/[^0-9]/g, '') || '0');
-                    
-                    const hoaElement = Array.from(card.querySelectorAll('.KeyFactsExtension .KeyFacts-item'))
-                        .find(el => el.textContent?.includes('HOA'));
-                    const hoa = hoaElement ? parseInt(hoaElement.textContent?.replace(/[^0-9]/g, '') || '0') : undefined;
-                    
-                    const features = Array.from(card.querySelectorAll('.KeyFactsExtension .KeyFacts-item'))
-                        .map(el => el.textContent?.trim() || '');
-                    
-                    const url = card.querySelector('.bp-Homecard__Photo')?.getAttribute('href') || '';
+
+                    const hoaText = await listing.$eval('.KeyFactsExtension .KeyFacts-item', el => 
+                        el.textContent?.includes('HOA') ? el.textContent.replace(/[^0-9]/g, '') : null
+                    ).catch(() => null);
+                    const hoa = hoaText ? parseInt(hoaText) : undefined;
+
+                    const features = await listing.$$eval('.KeyFactsExtension .KeyFacts-item', items =>
+                        items.map(item => item.textContent?.trim() || '')
+                    ).catch(() => []);
+
+                    const url = await listing.$eval('.bp-Homecard__Photo', el => el.getAttribute('href') || '').catch(() => '');
                     const fullUrl = `https://www.redfin.com${url}`;
 
-                    // Get the image URL
-                    const imageUrl = card.querySelector('.bp-Homecard__Photo--image')?.getAttribute('src') || '';
+                    const imageUrl = await listing.$eval('.bp-Homecard__Photo--image', el => el.getAttribute('src') || '').catch(() => '');
 
-                    return {
-                        address,
-                        price,
-                        beds,
-                        baths,
-                        sqft,
-                        hoa,
-                        features,
-                        url: fullUrl,
-                        imageUrl
-                    };
+                    // Only return a listing if we have at least an address and price
+                    if (address && price > 0) {
+                        return {
+                            address,
+                            price,
+                            beds,
+                            baths,
+                            sqft,
+                            hoa,
+                            features,
+                            url: fullUrl,
+                            imageUrl
+                        };
+                    }
+                    return null;
                 } catch (err) {
-                    console.error('Error processing card:', err);
+                    console.error('Error extracting listing data:', err);
                     return null;
                 }
-            }).filter(Boolean);
-        });
+            }));
 
-        if (!listings || listings.length === 0) {
-            throw new Error('No listings found on page');
+            // Filter out any null listings and return the results
+            const validListings = extractedListings.filter(listing => listing !== null);
+
+            return c.json({
+                source: searchUrl,
+                timestamp: new Date().toISOString(),
+                totalListings: validListings.length,
+                listings: validListings
+            }, 200, {
+                'Content-Type': 'application/json'
+            });
+
+        } catch (error) {
+            console.error('Error during scraping:', error);
+            return c.json({
+                error: "Failed to fetch listings",
+                message: error instanceof Error ? error.message : String(error)
+            }, 500, {
+                'Content-Type': 'application/json'
+            });
         }
-
-        return c.json({
-            source: searchUrl,
-            timestamp: new Date().toISOString(),
-            totalListings: listings.length,
-            listings: listings
-        });
 
     } catch (error) {
         console.error('Error during scraping:', error);
         return c.json({
             error: "Failed to fetch listings",
-            message: error instanceof Error ? error.message : String(error),
-            source: searchUrl
-        }, 500);
+            message: error instanceof Error ? error.message : String(error)
+        }, 500, {
+            'Content-Type': 'application/json'
+        });
     } finally {
         if (browser) {
             try {
@@ -378,6 +413,51 @@ app.get('/listings/financials', async (c) => {
       }
     }
   }
+});
+
+app.post('/api/zipcode', async (c) => {
+    try {
+        const { city, state } = await c.req.json();
+        
+        if (!city || !state) {
+            return c.json({ error: 'City and state are required' }, 400);
+        }
+
+        const messages = [
+            { role: "system", content: "You are a helpful assistant that provides zipcodes for US cities. Only respond with the zipcode number, nothing else." },
+            {
+                role: "user",
+                content: `What is the main zipcode for ${city}, ${state}? Only respond with the zipcode number.`,
+            },
+        ];
+
+        const response = await c.env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", { messages });
+        
+        // Extract the zipcode from the response
+        const zipcode = (response as any).response?.trim() || '';
+        
+        // Validate the zipcode format
+        if (!/^\d{5}$/.test(zipcode)) {
+            return c.json({ 
+                error: 'Could not determine a valid zipcode for the specified city and state. Please try a different city or enter a zipcode directly.' 
+            }, 400);
+        }
+
+        // Construct the Redfin URL directly with the zipcode
+        const searchUrl = `https://www.redfin.com/zipcode/${zipcode}`;
+        
+        return c.json({ 
+            zipcode,
+            searchUrl,
+            message: `Found zipcode ${zipcode} for ${city}, ${state}`
+        });
+    } catch (error) {
+        console.error('Error getting zipcode:', error);
+        return c.json({ 
+            error: 'Failed to get zipcode. Please try again or enter a zipcode directly.',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        }, 500);
+    }
 });
 
 export default {

@@ -273,21 +273,21 @@
         }
 
         /* Spinner Styles */
-    #spinner {
-        display: none;
-        width: 50px;
-        height: 50px;
-        border: 5px solid var(--light-gray);
-        border-top: 5px solid var(--primary);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 30px auto;
-    }
+        #spinner {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--light-gray);
+            border-top: 5px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
 
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
         @media (max-width: 768px) {
             .container {
@@ -306,6 +306,75 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .search-type-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .search-type-toggle button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .search-type-toggle button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .no-results-message {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .no-results-message h3 {
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        .no-results-message p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+        
+        .no-results-message ul {
+            text-align: left;
+            display: inline-block;
+            margin: 0 auto;
+            padding-left: 1.5rem;
+        }
+        
+        .no-results-message li {
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        
+        .error-message {
+            background-color: #fff3f3;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .error-message h3 {
+            color: #dc3545;
+            margin-bottom: 1rem;
+        }
+        
+        .error-message p {
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -320,42 +389,53 @@
 
     <main class="container">
         <section class="search-container">
-            <h2><i class="fas fa-filter"></i> Filter Properties</h2>
-            <form id="filterForm">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="minPrice">Minimum Price</label>
-                        <div class="input-group">
-                            <input type="number" id="minPrice" name="minPrice" step="1000" placeholder="$200,000">
-                            <span class="input-icon">$</span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="maxPrice">Maximum Price</label>
-                        <div class="input-group">
-                            <input type="number" id="maxPrice" name="maxPrice" step="1000" placeholder="$800,000">
-                            <span class="input-icon">$</span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="minBeds">Minimum Bedrooms</label>
-                        <div class="input-group">
-                            <input type="number" id="minBeds" name="minBeds" min="0" placeholder="2">
-                            <i class="fas fa-bed input-icon"></i>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="maxHOA">Maximum HOA</label>
-                        <div class="input-group">
-                            <input type="number" id="maxHOA" name="maxHOA" step="100" placeholder="$500">
-                            <span class="input-icon">$</span>
-                        </div>
+            <h2>Search Properties</h2>
+            <form id="searchForm">
+                <div class="input-group">
+                    <label>Search by:</label>
+                    <div class="search-type-toggle">
+                        <button type="button" class="active" data-type="zip">Zip Code</button>
+                        <button type="button" data-type="city">City & State</button>
                     </div>
                 </div>
-                <div class="form-group">
+
+                <div id="zipInput" class="input-group">
+                    <label for="zip">Zip Code</label>
+                    <input type="text" id="zip" name="zip" placeholder="Enter zip code">
+                </div>
+
+                <div id="cityInput" class="input-group" style="display: none;">
+                    <label for="city">City</label>
+                    <input type="text" id="city" name="city" placeholder="Enter city name">
+                    <label for="state">State</label>
+                    <input type="text" id="state" name="state" placeholder="Enter state (e.g., CA)">
+                </div>
+
+                <div class="input-group">
+                    <label for="minPrice">Minimum Price</label>
+                    <input type="number" id="minPrice" name="minPrice" placeholder="Enter minimum price">
+                </div>
+
+                <div class="input-group">
+                    <label for="maxPrice">Maximum Price</label>
+                    <input type="number" id="maxPrice" name="maxPrice" placeholder="Enter maximum price">
+                </div>
+
+                <div class="input-group">
+                    <label for="minBeds">Minimum Bedrooms</label>
+                    <input type="number" id="minBeds" name="minBeds" placeholder="Enter minimum bedrooms">
+                </div>
+
+                <div class="input-group">
+                    <label for="maxHOA">Maximum HOA</label>
+                    <input type="number" id="maxHOA" name="maxHOA" placeholder="Enter maximum HOA">
+                </div>
+
+                <div class="input-group">
                     <label for="features">Required Features</label>
-                    <input type="text" id="features" name="features" placeholder="pool, parking, ocean view">
+                    <input type="text" id="features" name="features" placeholder="Enter required features">
                 </div>
+
                 <button type="submit">
                     <i class="fas fa-search btn-icon"></i> Find Properties
                 </button>
@@ -379,52 +459,59 @@
     </footer>
 
     <script>
-        document.getElementById('filterForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const spinner = document.getElementById('spinner');
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchForm = document.getElementById('searchForm');
             const resultsDiv = document.getElementById('results');
-            
-            spinner.style.display = 'block';
-            resultsDiv.innerHTML = '';
+            const spinner = document.getElementById('spinner');
+            const emptyState = document.getElementById('emptyState');
+            const zipInput = document.getElementById('zipInput');
+            const cityInput = document.getElementById('cityInput');
+            const toggleButtons = document.querySelectorAll('.search-type-toggle button');
 
-            const formData = new FormData(e.target);
-            const params = new URLSearchParams();
-            
-            for (const [key, value] of formData.entries()) {
-                if (value) params.append(key, value);
+            if (!searchForm || !resultsDiv || !spinner || !emptyState || !zipInput || !cityInput) {
+                console.error('Required DOM elements not found');
+                return;
             }
 
-            try {
-                const response = await fetch(`/api/listings?${params.toString()}`);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const data = await response.json();
+            function displayResults(data) {
+                if (!resultsDiv) return;
                 
                 if (data.error) {
-                    resultsDiv.innerHTML = `<div class="error">${data.message}</div>`;
+                    resultsDiv.innerHTML = `
+                        <div class="error-message">
+                            <h3>Error</h3>
+                            <p>${data.error}</p>
+                        </div>
+                    `;
                     return;
                 }
 
-                if (data.listings.length === 0) {
-                    resultsDiv.innerHTML = '<div class="no-results">No listings found matching your criteria.</div>';
+                if (!data.listings || data.listings.length === 0) {
+                    resultsDiv.innerHTML = `
+                        <div class="no-results-message">
+                            <h3>No Listings Found</h3>
+                            <p>No properties match your search criteria. Try adjusting your filters:</p>
+                            <ul>
+                                <li>Try a different location (city/state or zipcode)</li>
+                                <li>Adjust your price range</li>
+                                <li>Modify the number of bedrooms</li>
+                                <li>Change the maximum HOA fee</li>
+                                <li>Select different features</li>
+                            </ul>
+                        </div>
+                    `;
                     return;
                 }
 
-                // Display listings with enhanced formatting
                 resultsDiv.innerHTML = `
                     <div class="results-header">
                         <h2><i class="fas fa-home"></i> ${data.listings.length} Properties Found</h2>
                     </div>
                     <div class="listing-grid">
-                        ${data.listings.map(listing => {
-                            // Use listing.image if available, otherwise use a themed placeholder
-                            const imageUrl = listing.imageUrl 
-                                ? listing.imageUrl 
-                                : `https://source.unsplash.com/random/600x400/?house,${Math.floor(Math.random() * 1000)}`;
-                            
-                            return `
+                        ${data.listings.map(listing => `
                             <div class="listing-card">
                                 <span class="listing-badge">For Sale</span>
-                                <div style="font-size:10px;word-break:break-all;background:#fff8;">${imageUrl}</div>
+                                <div class="listing-image" style="background-image: url('${listing.imageUrl}')"></div>
                                 <div class="listing-content">
                                     <div class="listing-header">
                                         <h3 class="listing-title">${listing.address.split(',')[0]}</h3>
@@ -453,14 +540,6 @@
                                                 <div class="detail-value sqft">${listing.sqft.toLocaleString()}</div>
                                             </div>
                                         </div>
-                                        ${listing.acres ? `
-                                        <div class="detail-item">
-                                            <i class="fas fa-mountain detail-icon acres"></i>
-                                            <div>
-                                                <div class="detail-label">Acres</div>
-                                                <div class="detail-value acres">${listing.acres}</div>
-                                            </div>
-                                        </div>` : ''}
                                         ${listing.hoa ? `
                                         <div class="detail-item">
                                             <i class="fas fa-home detail-icon hoa"></i>
@@ -478,31 +557,6 @@
                                         `).join('')}
                                     </div>` : ''}
                                     
-                                    <div class="financial-details">
-                                        ${listing.monthlyCost ? `
-                                        <div class="financial-row">
-                                            <span class="financial-label">Monthly Cost</span>
-                                            <span class="financial-value">$${listing.monthlyCost.toLocaleString()}</span>
-                                        </div>` : ''}
-                                        ${listing.monthlyRent ? `
-                                        <div class="financial-row">
-                                            <span class="financial-label">Est. Monthly Rent</span>
-                                            <span class="financial-value">$${listing.monthlyRent.toLocaleString()}</span>
-                                        </div>` : ''}
-                                        ${listing.cashFlow !== undefined ? `
-                                        <div class="financial-row">
-                                            <span class="financial-label">Monthly Cash Flow</span>
-                                            <span class="financial-value ${listing.cashFlow >= 0 ? 'positive' : 'negative'}">
-                                                $${Math.abs(listing.cashFlow).toLocaleString()}
-                                            </span>
-                                        </div>` : ''}
-                                        ${listing.roi ? `
-                                        <div class="financial-row">
-                                            <span class="financial-label">ROI</span>
-                                            <span class="financial-value">${listing.roi.toFixed(1)}%</span>
-                                        </div>` : ''}
-                                    </div>
-                                    
                                     <div class="action-buttons">
                                         <a href="${listing.url}" target="_blank" class="btn btn-primary">
                                             <i class="fas fa-external-link-alt"></i> View on Redfin
@@ -510,19 +564,99 @@
                                     </div>
                                 </div>
                             </div>
-                        `}).join('')}
+                        `).join('')}
                     </div>`;
-            } catch (error) {
-                console.error('Error:', error);
-                resultsDiv.innerHTML = `
-                    <div class="error-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Error Loading Properties</h3>
-                        <p>${error.message || 'Please try again later'}</p>
-                    </div>`;
-            } finally {
-                spinner.style.display = 'none';
             }
+
+            toggleButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    toggleButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    
+                    if (button.dataset.type === 'zip') {
+                        zipInput.style.display = 'block';
+                        cityInput.style.display = 'none';
+                    } else {
+                        zipInput.style.display = 'none';
+                        cityInput.style.display = 'block';
+                    }
+                });
+            });
+
+            searchForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                // Show spinner and clear results
+                spinner.style.display = 'block';
+                emptyState.style.display = 'none';
+                resultsDiv.innerHTML = '';
+                
+                const searchType = document.querySelector('.search-type-toggle button.active').dataset.type;
+                let zipcode = '';
+                
+                try {
+                    if (searchType === 'zip') {
+                        zipcode = document.getElementById('zip').value;
+                        if (!zipcode) {
+                            throw new Error('Please enter a zip code');
+                        }
+                    } else {
+                        const city = document.getElementById('city').value;
+                        const state = document.getElementById('state').value;
+                        if (!city || !state) {
+                            throw new Error('Please enter both city and state');
+                        }
+
+                        const zipcodeResponse = await fetch('/api/zipcode', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ city, state })
+                        });
+
+                        if (!zipcodeResponse.ok) {
+                            const errorData = await zipcodeResponse.json();
+                            throw new Error(errorData.error || 'Failed to get zipcode');
+                        }
+
+                        const zipcodeData = await zipcodeResponse.json();
+                        zipcode = zipcodeData.zipcode;
+                        
+                        if (!zipcode) {
+                            throw new Error('Could not determine zipcode for the specified city and state');
+                        }
+                    }
+                    
+                    const params = new URLSearchParams();
+                    params.append('zip', zipcode);
+                    params.append('minPrice', document.getElementById('minPrice').value);
+                    params.append('maxPrice', document.getElementById('maxPrice').value);
+                    params.append('minBeds', document.getElementById('minBeds').value);
+                    params.append('maxHOA', document.getElementById('maxHOA').value);
+                    params.append('features', document.getElementById('features').value);
+                    
+                    const response = await fetch('/api/listings?' + params.toString());
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to fetch listings');
+                    }
+                    
+                    const data = await response.json();
+                    displayResults(data);
+                } catch (error) {
+                    console.error('Error:', error);
+                    resultsDiv.innerHTML = `
+                        <div class="error-message">
+                            <h3>Error</h3>
+                            <p>${error instanceof Error ? error.message : 'Failed to fetch listings'}</p>
+                        </div>
+                    `;
+                } finally {
+                    spinner.style.display = 'none';
+                }
+            });
         });
     </script>
 </body>
