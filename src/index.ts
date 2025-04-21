@@ -7,6 +7,8 @@ export interface Env {
   BROWSER_KV_LV_HX: KVNamespace; // KV namespace for caching
   AI: Ai;
   [key: string]: any;
+  AIRDNA_EMAIL: string; // Add to your Cloudflare env vars
+  AIRDNA_PASSWORD: string; // Add to your Cloudflare env vars
 }
 
 interface Listing {
@@ -19,18 +21,155 @@ interface Listing {
   features: string[];
   url: string;
   imageUrl: string;
+  airDnaData?: {
+    estimatedRent: number;
+    occupancyRate: number;
+    revenuePotential: number;
+  };
 }
 
-interface SearchParams {
-  city: string;
-  state: string;
-  zip?: string;
-  minPrice: number;
-  maxPrice: number;
-  minBeds: number;
-  maxHOA: number;
-  features: string[];
+
+async function loginToAirDna(page: Page, env: Env): Promise<boolean> {
+  try {
+    // Navigate to AirDNA login page
+    await page.goto('https://auth.airdna.co/oauth2/authorize?tenantId=1fb206a8-177b-4684-af1f-8fff7cc153a0&client_id=5f040464-0aef-48a1-a1d1-daa9fbf81415&nonce=&pendingIdPLinkId=&redirect_uri=https%3A%2F%2Fapp.airdna.co&response_mode=&response_type=code&scope=profile%20openid&state=%7B%22path%22%3A%22%2Fdata%22%2C%22search%22%3A%22%22%7D&timezone=&metaData.device.name=&metaData.device.type=&code_challenge=&code_challenge_method=&user_code=', {
+      waitUntil: 'networkidle0',
+      timeout: 30000
+    });
+
+    // Wait for the page to be fully loaded
+    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
+
+    // Check if we're already logged in
+    const accountMenu = await page.$('button[aria-label="Account menu"]');
+    if (accountMenu) {
+      console.log('Already logged in');
+      return true;
+    }
+
+    // Wait for the login form to be visible
+    await page.waitForSelector('form', { timeout: 10000 });
+    
+    // Wait for the email input to be visible and interactable
+    await page.waitForSelector('#loginId', { 
+      visible: true,
+      timeout: 10000 
+    });
+    
+    // Wait for the password input to be visible and interactable
+    await page.waitForSelector('#password', { 
+      visible: true,
+      timeout: 10000 
+    });
+    
+    // Fill in credentials with a delay between each character
+    await page.type('#loginId', env.AIRDNA_EMAIL, { delay: 50 });
+    await page.type('#password', env.AIRDNA_PASSWORD, { delay: 50 });
+    
+    // Click the login button
+    const loginButton = await page.waitForSelector('#submit-button', { 
+      visible: true,
+      timeout: 10000 
+    });
+    if (!loginButton) {
+      throw new Error('Login button not found');
+    }
+    
+    // Click the button and wait for navigation
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 }),
+      loginButton.click()
+    ]);
+  
+    
+    return true;
+  } catch (error) {
+    console.error('Error logging into AirDNA:', error);
+    // Take a screenshot for debugging
+    await page.screenshot({ path: 'login-error.png' }).catch(() => {});
+    return false;
+  }
 }
+
+async function getAirDnaData(page: Page, address: string, beds: number): Promise<any> {
+  try {
+    // Navigate to rentalizer with the address
+    const rentalizerUrl = `https://app.airdna.co/data/rentalizer?address=${encodeURIComponent(address)}&bedrooms=${beds}&bathrooms=2&accommodates=4`;
+    await page.goto(rentalizerUrl, {
+      waitUntil: 'networkidle0',
+      timeout: 30000
+    });
+
+    // Wait for the page to load
+    await page.waitForSelector('h3.MuiTypography-root.MuiTypography-titleM.css-sd2qa2', { timeout: 15000 });
+
+    // Extract all data using the provided selectors
+    const data = await page.evaluate(() => {
+      // Helper function to extract numeric value from text
+      const extractNumber = (text: string | null): number => {
+        if (!text) return 0;
+        // Remove $, K, and any other non-numeric characters except decimal point
+        const cleaned = text.replace(/[^0-9.]/g, '');
+        // If the original text had 'K', multiply by 1000
+        const multiplier = text.includes('K') ? 1000 : 1;
+        return parseFloat(cleaned) * multiplier;
+      };
+
+      // Get net operating income
+      const noiElement = document.querySelector('h3.MuiTypography-root.MuiTypography-titleM.css-sd2qa2');
+      const netOperatingIncome = extractNumber(noiElement?.textContent || '');
+
+      // Get occupancy rate
+      const occupancyElement = document.querySelector('p.MuiTypography-root.MuiTypography-body1.css-kk2mec');
+      const occupancyText = occupancyElement?.textContent || '';
+      const occupancyRate = parseFloat(occupancyText.replace(/[^0-9.]/g, '')) || 0;
+
+      return {
+        netOperatingIncome,
+        occupancyRate
+      };
+    });
+
+    return data;
+  } catch (error) {
+    console.error('Error getting AirDNA data:', error);
+    return null;
+  }
+}
+
+async function extractListingsWithAirDna(page: Page, env: Env): Promise<Listing[]> {
+  const listings = await extractListings(page);
+  
+  // Launch a new browser for AirDNA to avoid conflicts
+  const airDnaBrowser = await puppeteer.launch(env.MYBROWSER);
+  const airDnaPage = await airDnaBrowser.newPage();
+  
+  try {
+    // Login to AirDNA
+    const loggedIn = await loginToAirDna(airDnaPage, env);
+    if (!loggedIn) {
+      console.log('Failed to login to AirDNA, skipping rental data');
+      return listings;
+    }
+
+    // Get AirDNA data for each listing
+    for (const listing of listings) {
+      try {
+        const airDnaData = await getAirDnaData(airDnaPage, listing.address, listing.beds);
+        if (airDnaData) {
+          listing.airDnaData = airDnaData;
+        }
+      } catch (error) {
+        console.error(`Error getting AirDNA data for ${listing.address}:`, error);
+      }
+    }
+  } finally {
+    await airDnaBrowser.close();
+  }
+
+  return listings;
+}
+
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -156,7 +295,15 @@ app.get('/api/listings', async (c) => {
         const maxHOA = parseInt(c.req.query('maxHOA') || '10000');
         const features = c.req.query('features')?.split(',') || [];
 
-        let searchZipcode: string;
+        // Validate required parameters
+        if (!zip && (!city || !state)) {
+            return c.json({ 
+                error: 'Either zipcode or city and state are required',
+                status: 400
+            }, 400);
+        }
+
+        let searchZipcode = '';  // Initialize with empty string
 
         // If zipcode is provided, use it directly
         if (zip) {
@@ -178,51 +325,87 @@ app.get('/api/listings', async (c) => {
             // Validate the zipcode format
             if (!/^\d{5}$/.test(searchZipcode)) {
                 return c.json({ 
-                    error: 'Could not determine a valid zipcode for the specified city and state. Please try a different city or enter a zipcode directly.' 
+                    error: 'Could not determine a valid zipcode for the specified city and state. Please try a different city or enter a zipcode directly.',
+                    status: 400
                 }, 400);
             }
-        } else {
-            return c.json({ error: 'Either zipcode or city and state are required' }, 400);
         }
 
         // Construct the search URL with the zipcode
-        let searchUrl = `https://www.redfin.com/zipcode/${searchZipcode}/filter`;
+        let searchUrl = `https://www.redfin.com/zipcode/${searchZipcode}`;
 
         // Add filters to the URL
         const filters = [];
         if (minPrice > 0) filters.push(`min-price=${Math.floor(minPrice/1000)}k`);
         if (maxPrice > 0) filters.push(`max-price=${Math.floor(maxPrice/1000)}k`);
         if (minBeds > 0) filters.push(`min-beds=${minBeds}`);
-        if (maxHOA < 10000) filters.push(`hoa=${maxHOA}`);
         if (features.length > 0) filters.push(`remarks=${features.join(',')}`);
+        if (maxHOA < 10000) filters.push(`hoa=${maxHOA}`);
 
+        // Add filters to URL if they exist
         if (filters.length > 0) {
-            searchUrl += `/${filters.join(',')}`;
+            searchUrl += `/filter/${filters.join(',')}`;
         }
 
         console.log('Searching with URL:', searchUrl);
 
-        // Initialize browser
+        // Initialize browser with increased timeout
         browser = await puppeteer.launch(c.env.MYBROWSER);
         const page = await browser.newPage();
         
-        // Set a basic user agent
+        // Set a more realistic user agent
         await page.setUserAgent(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
         );
 
-        // Navigate to the search URL
-        await page.goto(searchUrl, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
+        // Add additional headers to appear more like a real browser
+        await page.setExtraHTTPHeaders({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         });
+
+        // Set default navigation timeout
+        page.setDefaultNavigationTimeout(60000); // 60 seconds
+
+        // Navigate to the search URL with retry logic and random delay
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+            try {
+                // Add a random delay between 1-3 seconds before each attempt
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+                
+                await page.goto(searchUrl, {
+                    waitUntil: 'networkidle0',
+                    timeout: 60000
+                });
+
+                // Check if we got redirected to a captcha or error page
+                const currentUrl = page.url();
+                if (currentUrl.includes('captcha') || currentUrl.includes('error')) {
+                    throw new Error('Detected captcha or error page');
+                }
+
+                break; // If successful, break the retry loop
+            } catch (error) {
+                retryCount++;
+                if (retryCount === maxRetries) {
+                    throw error;
+                }
+                console.log(`Navigation attempt ${retryCount} failed, retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
 
         // Wait for either listings or no results message with increased timeout
         try {
             await Promise.race([
-                page.waitForSelector('.HomeCardContainer', { timeout: 20000 }),
-                page.waitForSelector('.no-results-message', { timeout: 20000 }),
-                page.waitForSelector('.bp-Homecard', { timeout: 20000 }) // Alternative selector
+                page.waitForSelector('.HomeCardContainer', { timeout: 30000 }),
+                page.waitForSelector('.no-results-message', { timeout: 30000 })
             ]);
 
             // Check if we have a "no results" message
@@ -233,14 +416,13 @@ app.get('/api/listings', async (c) => {
                     timestamp: new Date().toISOString(),
                     totalListings: 0,
                     listings: [],
-                    message: 'No listings found matching your criteria'
-                }, 200, {
-                    'Content-Type': 'application/json'
+                    message: 'No listings found matching your criteria',
+                    status: 200
                 });
             }
 
-            // Try to find listings using multiple possible selectors
-            const listings = await page.$$('.HomeCardContainer');
+            // Extract listings data
+            const listings = await extractListings(page);
             
             if (listings.length === 0) {
                 return c.json({
@@ -248,98 +430,35 @@ app.get('/api/listings', async (c) => {
                     timestamp: new Date().toISOString(),
                     totalListings: 0,
                     listings: [],
-                    message: 'No listings found matching your criteria'
-                }, 200, {
-                    'Content-Type': 'application/json'
+                    message: 'No listings found matching your criteria',
+                    status: 200
                 });
             }
-
-            // Extract listings data
-            const extractedListings = await Promise.all(listings.map(async (listing) => {
-                try {
-                    const address = await listing.$eval('.bp-Homecard__Content .bp-Homecard__Address', 
-                        el => el.textContent?.trim() || '').catch(() => '');
-                    
-                    const priceText = await listing.$eval('.bp-Homecard__Content .bp-Homecard__Price--value', 
-                        el => el.textContent?.trim().replace('$','').replace(/,/g,'') || '0').catch(() => '0');
-                    const price = parseInt(priceText);
-
-                    const bedsText = await listing.$eval('.bp-Homecard__Stats--beds', el => 
-                        el.textContent?.trim() || '0').catch(() => '0');
-                    const bathsText = await listing.$eval('.bp-Homecard__Stats--baths', el => 
-                        el.textContent?.trim() || '0').catch(() => '0');
-                    const sqftText = await listing.$eval('.bp-Homecard__Stats--sqft', el => 
-                        el.textContent?.trim() || '0').catch(() => '0');
-
-                    const beds = parseFloat(bedsText.replace(/[^0-9.]/g, '') || '0');
-                    const baths = parseFloat(bathsText.replace(/[^0-9.]/g, '') || '0');
-                    const sqft = parseInt(sqftText.replace(/[^0-9]/g, '') || '0');
-
-                    const hoaText = await listing.$eval('.KeyFactsExtension .KeyFacts-item', el => 
-                        el.textContent?.includes('HOA') ? el.textContent.replace(/[^0-9]/g, '') : null
-                    ).catch(() => null);
-                    const hoa = hoaText ? parseInt(hoaText) : undefined;
-
-                    const features = await listing.$$eval('.KeyFactsExtension .KeyFacts-item', items =>
-                        items.map(item => item.textContent?.trim() || '')
-                    ).catch(() => []);
-
-                    const url = await listing.$eval('.bp-Homecard__Photo', el => el.getAttribute('href') || '').catch(() => '');
-                    const fullUrl = `https://www.redfin.com${url}`;
-
-                    const imageUrl = await listing.$eval('.bp-Homecard__Photo--image', el => el.getAttribute('src') || '').catch(() => '');
-
-                    // Only return a listing if we have at least an address and price
-                    if (address && price > 0) {
-                        return {
-                            address,
-                            price,
-                            beds,
-                            baths,
-                            sqft,
-                            hoa,
-                            features,
-                            url: fullUrl,
-                            imageUrl
-                        };
-                    }
-                    return null;
-                } catch (err) {
-                    console.error('Error extracting listing data:', err);
-                    return null;
-                }
-            }));
-
-            // Filter out any null listings and return the results
-            const validListings = extractedListings.filter(listing => listing !== null);
 
             return c.json({
                 source: searchUrl,
                 timestamp: new Date().toISOString(),
-                totalListings: validListings.length,
-                listings: validListings
-            }, 200, {
-                'Content-Type': 'application/json'
+                totalListings: listings.length,
+                listings: listings,
+                status: 200
             });
 
         } catch (error) {
             console.error('Error during scraping:', error);
             return c.json({
                 error: "Failed to fetch listings",
-                message: error instanceof Error ? error.message : String(error)
-            }, 500, {
-                'Content-Type': 'application/json'
-            });
+                message: "The request timed out. Please try again or refine your search criteria.",
+                status: 500
+            }, 500);
         }
 
     } catch (error) {
         console.error('Error during scraping:', error);
         return c.json({
             error: "Failed to fetch listings",
-            message: error instanceof Error ? error.message : String(error)
-        }, 500, {
-            'Content-Type': 'application/json'
-        });
+            message: error instanceof Error ? error.message : "An unexpected error occurred. Please try again.",
+            status: 500
+        }, 500);
     } finally {
         if (browser) {
             try {
@@ -352,67 +471,106 @@ app.get('/api/listings', async (c) => {
 });
 
 // Add new endpoint for property financial analysis
-app.get('/listings/financials', async (c) => {
-  const address = c.req.query('address');
-  if (!address) {
-    return c.json({ error: 'Address is required' }, 400);
-  }
+app.get('/api/financials', async (c) => {
+    try {
+        // Get query parameters
+        const address = c.req.query('address');
+        if (!address) {
+            return c.json({ 
+                error: 'Address is required',
+                status: 400
+            }, 400);
+        }
 
-  let browser;
-  try {
-    // Initialize browser
-    browser = await puppeteer.launch(c.env.MYBROWSER);
-    const page = await browser.newPage();
-    
-    // Set a basic user agent
-    await page.setUserAgent(
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    );
+        let browser;
+        try {
+            // Initialize browser
+            browser = await puppeteer.launch(c.env.MYBROWSER);
+            const page = await browser.newPage();
+            
+            // Set a basic user agent
+            await page.setUserAgent(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            );
 
-    // Navigate to AirDNA rentalizer
-    const url = `https://app.airdna.co/data/rentalizer?address=${encodeURIComponent(address)}`;
-    await page.goto(url, {
-      waitUntil: 'networkidle0',
-      timeout: 30000
-    });
+            // First, login to AirDNA
+            const loggedIn = await loginToAirDna(page, c.env);
+            if (!loggedIn) {
+                return c.json({
+                    status: 'error',
+                    error: 'Failed to login to AirDNA',
+                    message: 'Could not authenticate with AirDNA'
+                }, 401);
+            }
 
-    // Wait for the data to load
-    await page.waitForSelector('h3.MuiTypography-root.MuiTypography-titleM.css-sd2qa2', { timeout: 10000 });
+            // Navigate to AirDNA rentalizer
+            const url = `https://app.airdna.co/data/rentalizer?address=${encodeURIComponent(address)}&bedrooms=2&bathrooms=2&accommodates=4`;
+            await page.goto(url, {
+                waitUntil: 'networkidle0',
+                timeout: 30000
+            });
 
-    // Extract the financial data
-    const financialData = await page.evaluate(() => {
-      const getValue = (selector: string) => {
-        const element = document.querySelector(selector);
-        return element ? element.textContent?.trim().replace(/[^0-9.]/g, '') : null;
-      };
+            // Wait for the page to load
+            await page.waitForSelector('h3', { timeout: 15000 });
 
-      const priceElement = document.querySelector('h3.MuiTypography-root.MuiTypography-titleM.css-sd2qa2');
-      const price = priceElement ? parseFloat(priceElement.textContent?.replace(/[^0-9.]/g, '') || '0') : 0;
+            // Extract all data using XPath
+            const data = await page.evaluate(() => {
+                const getValue = (xpath: string) => {
+                    const result = document.evaluate(
+                        xpath,
+                        document,
+                        null,
+                        XPathResult.FIRST_ORDERED_NODE_TYPE,
+                        null
+                    );
+                    const element = result.singleNodeValue;
+                    return element ? parseFloat(element.textContent?.replace(/[^0-9.]/g, '') || '0') : 0;
+                };
 
-      return {
-        estimatedRent: price,
-        occupancyRate: parseFloat(getValue('.occupancy-rate') || '0'),
-        revenuePotential: parseFloat(getValue('.revenue-potential') || '0')
-      };
-    });
+                return {
+                    estimatedRent: getValue('/html/body/div[2]/div/main/div/div/div[2]/div[1]/div[2]/div[2]/div/div[2]/div[2]/div[2]/h3'),
+                    occupancyRate: getValue('/html/body/div[2]/div/main/div/div/div[2]/div[1]/div[2]/div[2]/div/div[2]/div[3]/div[2]/h3'),
+                    revenuePotential: getValue('/html/body/div[2]/div/main/div/div/div[2]/div[1]/div[2]/div[2]/div/div[2]/div[4]/div[2]/h3')
+                };
+            });
 
-    return c.json(financialData);
+            if (!data.estimatedRent && !data.occupancyRate && !data.revenuePotential) {
+                return c.json({
+                    status: 'error',
+                    error: 'No data found',
+                    message: 'Could not find rental data for this property'
+                }, 404);
+            }
 
-  } catch (error) {
-    console.error('Error fetching financial data:', error);
-    return c.json({
-      error: 'Failed to fetch financial data',
-      message: error instanceof Error ? error.message : String(error)
-    }, 500);
-  } finally {
-    if (browser) {
-      try {
-        await browser.close();
-      } catch (e) {
-        console.error("Error closing browser:", e);
-      }
+            return c.json({
+                status: 'success',
+                data
+            });
+
+        } catch (error) {
+            console.error('Error fetching financial data:', error);
+            return c.json({
+                status: 'error',
+                error: 'Failed to fetch financial data',
+                message: error instanceof Error ? error.message : String(error)
+            }, 500);
+        } finally {
+            if (browser) {
+                try {
+                    await browser.close();
+                } catch (e) {
+                    console.error("Error closing browser:", e);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error in financials endpoint:', error);
+        return c.json({
+            status: 'error',
+            error: 'Internal server error',
+            message: error instanceof Error ? error.message : String(error)
+        }, 500);
     }
-  }
 });
 
 app.post('/api/zipcode', async (c) => {
@@ -456,6 +614,29 @@ app.post('/api/zipcode', async (c) => {
         return c.json({ 
             error: 'Failed to get zipcode. Please try again or enter a zipcode directly.',
             details: error instanceof Error ? error.message : 'Unknown error'
+        }, 500);
+    }
+});
+
+app.get('/listings/financials', async (c) => {
+    try {
+        // TODO: Implement financial data fetching logic
+        return c.json({
+            status: 'success',
+            message: 'Financial data endpoint is ready',
+            data: {
+                // Placeholder data structure
+                estimatedRent: 0,
+                occupancyRate: 0,
+                revenuePotential: 0
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching financial data:', error);
+        return c.json({
+            status: 'error',
+            message: 'Failed to fetch financial data',
+            error: error instanceof Error ? error.message : 'Unknown error'
         }, 500);
     }
 });

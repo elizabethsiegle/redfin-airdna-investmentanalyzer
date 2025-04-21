@@ -4,7 +4,7 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "zillowscrape",
+	"name": "investment-property-analyzer",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-03-11",
 	"observability": {

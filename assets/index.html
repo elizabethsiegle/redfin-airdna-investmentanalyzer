@@ -509,98 +509,138 @@
             }
 
             function displayResults(data) {
-                if (!resultsDiv) return;
-                
-                if (data.error) {
-                    resultsDiv.innerHTML = `
+                const resultsContainer = document.getElementById('results');
+                if (!resultsContainer) return;
+
+                // Clear previous results
+                resultsContainer.innerHTML = '';
+
+                // Check if we have listings in the data
+                if (!data.listings || !Array.isArray(data.listings)) {
+                    resultsContainer.innerHTML = `
                         <div class="error-message">
                             <h3>Error</h3>
-                            <p>${data.error}</p>
+                            <p>No listings data available</p>
                         </div>
                     `;
                     return;
                 }
 
-                if (!data.listings || data.listings.length === 0) {
-                    resultsDiv.innerHTML = `
-                        <div class="no-results-message">
-                            <h3>No Listings Found</h3>
-                            <p>No properties match your search criteria. Try adjusting your filters:</p>
-                            <ul>
-                                <li>Try a different location (city/state or zipcode)</li>
-                                <li>Adjust your price range</li>
-                                <li>Modify the number of bedrooms</li>
-                                <li>Change the maximum HOA fee</li>
-                                <li>Select different features</li>
-                            </ul>
-                        </div>
-                    `;
-                    return;
-                }
+                // Create a grid container for the listings
+                const gridContainer = document.createElement('div');
+                gridContainer.className = 'listing-grid';
+                
+                // Process each listing
+                data.listings.forEach(listing => {
+                    const card = document.createElement('div');
+                    card.className = 'listing-card';
+                    
+                    // Format price with commas
+                    const formattedPrice = new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: 0
+                    }).format(listing.price);
 
-                resultsDiv.innerHTML = `
-                    <div class="results-header">
-                        <h2><i class="fas fa-home"></i> ${data.listings.length} Properties Found</h2>
-                    </div>
-                    <div class="listing-grid">
-                        ${data.listings.map(listing => `
-                            <div class="listing-card">
-                                <span class="listing-badge">For Sale</span>
-                                <div class="listing-image" style="background-image: url('${listing.imageUrl}')"></div>
-                                <div class="listing-content">
-                                    <div class="listing-header">
-                                        <h3 class="listing-title">${listing.address.split(',')[0]}</h3>
-                                        <div class="listing-price">$${listing.price.toLocaleString()}</div>
+                    // Format net operating income if available
+                    const noi = listing.airDnaData?.netOperatingIncome;
+                    const formattedNoi = noi ? new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: 0
+                    }).format(noi) : 'N/A';
+
+                    // Format occupancy rate if available
+                    const occupancyRate = listing.airDnaData?.occupancyRate;
+                    const formattedOccupancy = occupancyRate ? `${occupancyRate}%` : 'N/A';
+
+                    card.innerHTML = `
+                        <div class="listing-image" style="background-image: url('${listing.imageUrl}')">
+                            <span class="listing-badge">For Sale</span>
+                        </div>
+                        <div class="listing-content">
+                            <h3 class="listing-title">${listing.address}</h3>
+                            <div class="listing-price">${formattedPrice}</div>
+                            <div class="listing-details">
+                                <div class="detail-item">
+                                    <i class="fas fa-bed detail-icon beds"></i>
+                                    <div>
+                                        <div class="detail-label">Beds</div>
+                                        <div class="detail-value beds">${listing.beds}</div>
                                     </div>
-                                    
-                                    <div class="listing-details">
-                                        <div class="detail-item">
-                                            <i class="fas fa-bed detail-icon beds"></i>
-                                            <div>
-                                                <div class="detail-label">Beds</div>
-                                                <div class="detail-value beds">${listing.beds}</div>
-                                            </div>
-                                        </div>
-                                        <div class="detail-item">
-                                            <i class="fas fa-bath detail-icon baths"></i>
-                                            <div>
-                                                <div class="detail-label">Baths</div>
-                                                <div class="detail-value baths">${listing.baths}</div>
-                                            </div>
-                                        </div>
-                                        <div class="detail-item">
-                                            <i class="fas fa-ruler-combined detail-icon sqft"></i>
-                                            <div>
-                                                <div class="detail-label">Sq Ft</div>
-                                                <div class="detail-value sqft">${listing.sqft.toLocaleString()}</div>
-                                            </div>
-                                        </div>
-                                        ${listing.hoa ? `
-                                        <div class="detail-item">
-                                            <i class="fas fa-home detail-icon hoa"></i>
-                                            <div>
-                                                <div class="detail-label">HOA</div>
-                                                <div class="detail-value hoa">$${listing.hoa}/mo</div>
-                                            </div>
-                                        </div>` : ''}
+                                </div>
+                                <div class="detail-item">
+                                    <i class="fas fa-bath detail-icon baths"></i>
+                                    <div>
+                                        <div class="detail-label">Baths</div>
+                                        <div class="detail-value baths">${listing.baths}</div>
                                     </div>
-                                    
-                                    ${listing.features.length > 0 ? `
-                                    <div class="listing-features">
-                                        ${listing.features.map(feature => `
-                                            <span class="feature-tag">${feature}</span>
-                                        `).join('')}
-                                    </div>` : ''}
-                                    
-                                    <div class="action-buttons">
-                                        <a href="${listing.url}" target="_blank" class="btn btn-primary">
-                                            <i class="fas fa-external-link-alt"></i> View on Redfin
-                                        </a>
+                                </div>
+                                <div class="detail-item">
+                                    <i class="fas fa-ruler-combined detail-icon sqft"></i>
+                                    <div>
+                                        <div class="detail-label">Sq Ft</div>
+                                        <div class="detail-value sqft">${listing.sqft.toLocaleString()}</div>
                                     </div>
                                 </div>
                             </div>
-                        `).join('')}
-                    </div>`;
+                            <div class="financial-details">
+                                <div class="financial-row">
+                                    <span>Net Operating Income:</span>
+                                    <span class="positive">${formattedNoi}</span>
+                                </div>
+                                <div class="financial-row">
+                                    <span>Occupancy Rate:</span>
+                                    <span class="positive">${formattedOccupancy}</span>
+                                </div>
+                            </div>
+                            ${listing.hoa ? `
+                            <div class="detail-item">
+                                <i class="fas fa-home detail-icon hoa"></i>
+                                <div>
+                                    <div class="detail-label">HOA</div>
+                                    <div class="detail-value hoa">$${listing.hoa}/mo</div>
+                                </div>
+                            </div>` : ''}
+                            ${listing.features.length > 0 ? `
+                            <div class="listing-features">
+                                ${listing.features.map(feature => `
+                                    <span class="feature-tag">${feature}</span>
+                                `).join('')}
+                            </div>` : ''}
+                            <div class="action-buttons">
+                                <a href="${listing.url}" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-external-link-alt"></i> View on Redfin
+                                </a>
+                                ${listing.airDnaData?.airDnaUrl ? `
+                                <a href="${listing.airDnaData.airDnaUrl}" target="_blank" class="btn btn-primary">
+                                    <i class="fas fa-chart-line"></i> View on AirDNA
+                                </a>` : ''}
+                            </div>
+                        </div>
+                    `;
+                    
+                    gridContainer.appendChild(card);
+                });
+
+                // Add the grid to the results container
+                resultsContainer.appendChild(gridContainer);
+
+                // Add the "Get Financial Analysis" button below the listings
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'mt-8 text-center';
+                buttonContainer.innerHTML = `
+                    <button id="fetchFinancials" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        Get Financial Analysis
+                    </button>
+                `;
+                resultsContainer.appendChild(buttonContainer);
+
+                // Set up the event listener for the button
+                const fetchFinancialsBtn = document.getElementById('fetchFinancials');
+                if (fetchFinancialsBtn) {
+                    fetchFinancialsBtn.addEventListener('click', fetchFinancials);
+                }
             }
 
             toggleButtons.forEach(button => {
@@ -679,7 +719,21 @@
                     }
                     
                     const data = await response.json();
-                    displayResults(data);
+                    
+                    if (data.status === 200) {
+                        if (data.totalListings === 0) {
+                            resultsDiv.innerHTML = `
+                                <div class="no-results-message">
+                                    <h3>No Results Found</h3>
+                                    <p>${data.message || 'No properties found matching your criteria.'}</p>
+                                </div>
+                            `;
+                        } else {
+                            displayResults(data);
+                        }
+                    } else {
+                        throw new Error(data.message || 'Failed to fetch listings');
+                    }
                 } catch (error) {
                     console.error('Error:', error);
                     resultsDiv.innerHTML = `
@@ -693,6 +747,65 @@
                 }
             });
         });
+
+        async function fetchFinancials() {
+            const button = document.getElementById('fetchFinancials');
+            button.disabled = true;
+            button.textContent = 'Loading...';
+
+            try {
+                // Get the first listing's address
+                const firstListing = document.querySelector('.listing-card');
+                if (!firstListing) {
+                    throw new Error('No listings found to analyze');
+                }
+
+                const address = firstListing.querySelector('.listing-title').textContent;
+                const response = await fetch(`/api/financials?address=${encodeURIComponent(address)}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to fetch financial data');
+                }
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Display financial data
+                    const financialData = data.data;
+                    const financialDetails = document.createElement('div');
+                    financialDetails.className = 'financial-details';
+                    financialDetails.innerHTML = `
+                        <h3>Financial Analysis</h3>
+                        <div class="financial-row">
+                            <span>Estimated Monthly Rent:</span>
+                            <span class="positive">$${financialData.estimatedRent.toLocaleString()}</span>
+                        </div>
+                        <div class="financial-row">
+                            <span>Occupancy Rate:</span>
+                            <span class="positive">${financialData.occupancyRate}%</span>
+                        </div>
+                        <div class="financial-row">
+                            <span>Annual Revenue Potential:</span>
+                            <span class="positive">$${financialData.revenuePotential.toLocaleString()}</span>
+                        </div>
+                    `;
+                    
+                    // Insert after the listings grid
+                    const listingsGrid = document.querySelector('.listing-grid');
+                    if (listingsGrid) {
+                        listingsGrid.parentNode.insertBefore(financialDetails, listingsGrid.nextSibling);
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to fetch financial data');
+                }
+            } catch (error) {
+                console.error('Error fetching financial data:', error);
+                alert(error.message || 'Failed to fetch financial data. Please try again.');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Get Financial Analysis';
+            }
+        }
     </script>
 </body>
 </html>
